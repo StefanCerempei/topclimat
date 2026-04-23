@@ -1,13 +1,17 @@
-// frontend/src/services/api.js
 import axios from 'axios';
-import { API_CONFIG } from '../config/api.config';
 
-const apiClient = axios.create(API_CONFIG);
+const apiClient = axios.create({
+    baseURL: process.env.REACT_APP_API_URL || 'http://localhost:5000/api',
+    timeout: 30000,
+    headers: {
+        'Content-Type': 'application/json',
+    },
+});
 
-// Request interceptor
+// Request interceptor - add token
 apiClient.interceptors.request.use(
     (config) => {
-        const token = localStorage.getItem('accessToken');
+        const token = localStorage.getItem('token');
         if (token) {
             config.headers.Authorization = `Bearer ${token}`;
         }
@@ -16,29 +20,15 @@ apiClient.interceptors.request.use(
     (error) => Promise.reject(error)
 );
 
-// Response interceptor
+// Response interceptor - handle errors
 apiClient.interceptors.response.use(
     (response) => response.data,
-    async (error) => {
-        const originalRequest = error.config;
-
-        if (error.response?.status === 401 && !originalRequest._retry) {
-            originalRequest._retry = true;
-            try {
-                const refreshToken = localStorage.getItem('refreshToken');
-                const response = await apiClient.post('/auth/refresh-token', { refreshToken });
-                const { accessToken } = response.data;
-                localStorage.setItem('accessToken', accessToken);
-                originalRequest.headers.Authorization = `Bearer ${accessToken}`;
-                return apiClient(originalRequest);
-            } catch (refreshError) {
-                localStorage.removeItem('accessToken');
-                localStorage.removeItem('refreshToken');
-                window.location.href = '/login';
-                return Promise.reject(refreshError);
-            }
+    (error) => {
+        if (error.response?.status === 401) {
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            window.location.href = '/login';
         }
-
         return Promise.reject(error.response?.data || error);
     }
 );
